@@ -1,0 +1,4 @@
+- [x] Set up private accounts, pair invitations, and shared data.
+- [ ] Build the nine idea lists and date journal with XP.
+- [ ] Add paired customizable avatars and unlockable accessories.
+- [ ] Verify the main experience.
