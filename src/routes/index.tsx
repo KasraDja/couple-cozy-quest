@@ -1,24 +1,138 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from '@tanstack/react-router';
+import { useEffect, useMemo, useState } from 'react';
+import type { User } from '@supabase/supabase-js';
+import { supabase } from '@/integrations/supabase/client';
+import { lovable } from '@/integrations/lovable/index';
+import { Button } from '@/components/ui/button';
+import { CoupleAvatars } from '@/components/CoupleAvatars';
+import { ArrowLeft, ArrowRight, Check, ChevronRight, Copy, Heart, Home, LogOut, Plus, Search, Sparkles, Trash2, X, Pencil, CalendarDays, Lock, Link as LinkIcon } from 'lucide-react';
+import type { Tables } from '@/integrations/supabase/types';
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
-export const Route = createFileRoute("/")({
-  component: Index,
+export const Route = createFileRoute('/')({
+  head: () => ({ meta: [
+    { title: 'Togetherly — Our little world' },
+    { name: 'description', content: 'A private place for two to save ideas, make memories, and level up together.' },
+    { property: 'og:title', content: 'Togetherly — Our little world' },
+    { property: 'og:description', content: 'Save your next adventure and celebrate every date together.' },
+    { property: 'og:type', content: 'website' },
+    { name: 'twitter:card', content: 'summary_large_image' },
+  ] }), component: App,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
-  return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
-  );
+type Profile = Tables<'profiles'>;
+type Idea = Tables<'ideas'>;
+type DateEntry = Tables<'dates'>;
+type Couple = Tables<'couples'>;
+type Tab = 'home' | 'lists' | 'dates' | 'avatars';
+const categories = [
+  { key: 'recipes', title: 'Recipes to make', short: 'Recipes', icon: '🍳', tint: 'peach' },
+  { key: 'restaurants', title: 'Places to eat', short: 'Eat out', icon: '🍜', tint: 'yellow' },
+  { key: 'watch', title: 'Things to watch', short: 'Watch', icon: '🎬', tint: 'lilac' },
+  { key: 'music', title: 'Music recommendations', short: 'Music', icon: '🎵', tint: 'blue' },
+  { key: 'places', title: 'Places to go', short: 'Go out', icon: '🌿', tint: 'mint' },
+  { key: 'home', title: 'Things to do at home', short: 'At home', icon: '🛋️', tint: 'peach' },
+  { key: 'trips', title: 'Trips to do', short: 'Trips', icon: '✈️', tint: 'blue' },
+  { key: 'events', title: 'Events & gigs', short: 'Events', icon: '🎟️', tint: 'yellow' },
+  { key: 'videos', title: 'Video recommendations', short: 'Videos', icon: '📹', tint: 'lilac' },
+] as const;
+const rewards = [{ key: 'none', title: 'Nothing', level: 1, icon: '✨' }, { key: 'bow', title: 'Sweet bow', level: 2, icon: '🎀' }, { key: 'glasses', title: 'Cool glasses', level: 3, icon: '👓' }, { key: 'cap', title: 'Sunny cap', level: 4, icon: '🧢' }, { key: 'crown', title: 'Golden crown', level: 5, icon: '👑' }];
+const xpPerDate = 50;
+const levelFromXp = (xp: number) => Math.floor(xp / 150) + 1;
+
+function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [partner, setPartner] = useState<Profile | null>(null);
+  const [couple, setCouple] = useState<Couple | null>(null);
+  const [ideas, setIdeas] = useState<Idea[]>([]);
+  const [dates, setDates] = useState<DateEntry[]>([]);
+  const [tab, setTab] = useState<Tab>('home');
+  const [category, setCategory] = useState<string | null>(null);
+  const [modal, setModal] = useState<'idea' | 'date' | null>(null);
+  const [editing, setEditing] = useState<Idea | null>(null);
+  const [authMode, setAuthMode] = useState<'sign-in' | 'sign-up'>('sign-up');
+  const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
+  const [name, setName] = useState(''); const [code, setCode] = useState('');
+  const [title, setTitle] = useState(''); const [note, setNote] = useState(''); const [link, setLink] = useState('');
+  const [dateDay, setDateDay] = useState(new Date().toLocaleDateString('en-CA')); const [ideaId, setIdeaId] = useState('');
+  const [formCategory, setFormCategory] = useState('recipes'); const [busy, setBusy] = useState(false); const [message, setMessage] = useState('');
+  const xp = dates.length * xpPerDate; const level = levelFromXp(xp);
+  const categoryInfo = categories.find(c => c.key === category);
+  const currentIdeas = useMemo(() => ideas.filter(i => i.category === category), [ideas, category]);
+
+  async function loadData(current: User) {
+    const { data: own } = await supabase.from('profiles').select('*').eq('id', current.id).maybeSingle();
+    if (!own) {
+      const { data: created } = await supabase.from('profiles').upsert({ id: current.id, display_name: current.user_metadata?.['display_name'] || current.email?.split('@')[0] || 'You' }).select().single();
+      setProfile(created);
+    } else setProfile(own);
+    const { data: membership } = await supabase.from('couple_members').select('couple_id,user_id').eq('user_id', current.id).maybeSingle();
+    if (!membership) { setCouple(null); setPartner(null); setIdeas([]); setDates([]); setLoading(false); return; }
+    const [{ data: pair }, { data: members }, { data: savedIdeas }, { data: savedDates }] = await Promise.all([
+      supabase.from('couples').select('*').eq('id', membership.couple_id).single(),
+      supabase.from('couple_members').select('user_id').eq('couple_id', membership.couple_id),
+      supabase.from('ideas').select('*').eq('couple_id', membership.couple_id).order('created_at', { ascending: false }),
+      supabase.from('dates').select('*').eq('couple_id', membership.couple_id).order('happened_on', { ascending: false }),
+    ]);
+    setCouple(pair); setIdeas(savedIdeas || []); setDates(savedDates || []);
+    const partnerId = members?.find(m => m.user_id !== current.id)?.user_id;
+    if (partnerId) { const { data } = await supabase.from('profiles').select('*').eq('id', partnerId).maybeSingle(); setPartner(data); }
+    else setPartner(null);
+    setLoading(false);
+  }
+  useEffect(() => {
+    let active = true;
+    supabase.auth.getUser().then(({ data }) => { if (active) { setUser(data.user); if (data.user) void loadData(data.user); else setLoading(false); } });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+      setUser(session?.user || null);
+      if (session?.user) void loadData(session.user); else { setProfile(null); setCouple(null); setLoading(false); }
+    });
+    return () => { active = false; listener.subscription.unsubscribe(); };
+  }, []);
+  useEffect(() => {
+    if (!couple || !user) return;
+    const channel = supabase.channel(`couple-${couple.id}`).on('postgres_changes', { event: '*', schema: 'public', table: 'ideas', filter: `couple_id=eq.${couple.id}` }, () => void loadData(user)).on('postgres_changes', { event: '*', schema: 'public', table: 'dates', filter: `couple_id=eq.${couple.id}` }, () => void loadData(user)).subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [couple?.id, user?.id]);
+  const refresh = async () => { if (user) await loadData(user); };
+  async function authenticate(e: React.FormEvent) {
+    e.preventDefault(); setBusy(true); setMessage('');
+    const result = authMode === 'sign-up' ? await supabase.auth.signUp({ email, password, options: { data: { display_name: name.trim() || 'You' } } }) : await supabase.auth.signInWithPassword({ email, password });
+    if (result.error) setMessage(result.error.message);
+    else if (authMode === 'sign-up' && !result.data.session) setMessage('Check your email to confirm your account, then sign in.');
+    else if (result.data.user) { setUser(result.data.user); await loadData(result.data.user); }
+    setBusy(false);
+  }
+  async function googleSignIn() { setMessage(''); const result = await lovable.auth.signInWithOAuth('google', { redirect_uri: window.location.origin }); if (result.error) setMessage(result.error.message); else if (!result.redirected) { const { data } = await supabase.auth.getUser(); if (data.user) { setUser(data.user); await loadData(data.user); } } }
+  async function makeCouple() { if (!user) return; setBusy(true); setMessage(''); const random = Array.from(crypto.getRandomValues(new Uint8Array(8))).map(v => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[v % 32]).join(''); const { error } = await supabase.rpc('create_couple', { _code: random }); if (error) setMessage(error.message); else await refresh(); setBusy(false); }
+  async function joinCouple(e: React.FormEvent) { e.preventDefault(); setBusy(true); setMessage(''); const { error } = await supabase.rpc('join_couple', { _code: code.toUpperCase().trim() }); if (error) setMessage(error.message); else await refresh(); setBusy(false); }
+  function openIdea(item?: Idea, selected?: string) { setEditing(item || null); setTitle(item?.title || ''); setNote(item?.note || ''); setLink(item?.link || ''); setFormCategory(item?.category || selected || category || 'recipes'); setMessage(''); setModal('idea'); }
+  function openDate(item?: Idea) { setTitle(item?.title || ''); setNote(''); setIdeaId(item?.id || ''); setDateDay(new Date().toLocaleDateString('en-CA')); setMessage(''); setModal('date'); }
+  async function saveIdea(e: React.FormEvent) { e.preventDefault(); if (!couple || !user || !title.trim()) return; setBusy(true); setMessage(''); const payload = { title: title.trim(), note: note.trim(), link: link.trim() || null, category: formCategory };
+    const { error } = editing ? await supabase.from('ideas').update(payload).eq('id', editing.id) : await supabase.from('ideas').insert({ ...payload, couple_id: couple.id, added_by: user.id });
+    if (error) setMessage(error.message); else { setModal(null); await refresh(); } setBusy(false);
+  }
+  async function saveDate(e: React.FormEvent) { e.preventDefault(); if (!couple || !user || !title.trim()) return; setBusy(true); setMessage(''); const { error } = await supabase.from('dates').insert({ couple_id: couple.id, added_by: user.id, title: title.trim(), note: note.trim(), happened_on: dateDay, idea_id: ideaId || null }); if (error) setMessage(error.message); else { setModal(null); await refresh(); setTab('dates'); setCategory(null); } setBusy(false); }
+  async function deleteIdea(item: Idea) { if (!window.confirm(`Delete “${item.title}”?`)) return; const { error } = await supabase.from('ideas').delete().eq('id', item.id); if (error) setMessage(error.message); else await refresh(); }
+  async function deleteDate(item: DateEntry) { if (!window.confirm(`Remove “${item.title}” and its ${xpPerDate} XP?`)) return; const { error } = await supabase.from('dates').delete().eq('id', item.id); if (error) setMessage(error.message); else await refresh(); }
+  async function updateProfile(fields: Partial<Profile>) { if (!user) return; const { data, error } = await supabase.from('profiles').update(fields).eq('id', user.id).select().single(); if (error) setMessage(error.message); else setProfile(data); }
+  function go(next: Tab) { setTab(next); setCategory(null); setMessage(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  if (loading) return <div className="loading-screen"><span className="loading-heart">♥</span></div>;
+  if (!user) return <main className="auth-shell"><div className="auth-brand"><span className="brand-mark">♥</span> togetherly<span className="brand-dot">.</span></div><div className="auth-layout"><div className="auth-intro"><span className="eyebrow">A LITTLE WORLD FOR TWO</span><h1>More moments.<br/><em>More us.</em></h1><p>All your someday ideas in one place. Make plans, make memories, and grow together along the way.</p><CoupleAvatars /></div><div className="auth-panel"><span className="eyebrow">WELCOME TO YOUR SPACE</span><h2>{authMode === 'sign-up' ? 'Start your story' : 'Welcome back'}</h2><p>{authMode === 'sign-up' ? 'Make an account, then invite your favourite person.' : 'Your next adventure is waiting.'}</p><form onSubmit={authenticate}>{authMode === 'sign-up' && <label>Your name<input value={name} onChange={e => setName(e.target.value)} placeholder="What should we call you?" required maxLength={40}/></label>}<label>Email<input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" required/></label><label>Password<input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 6 characters" minLength={6} required/></label><Button className="w-full !h-12" disabled={busy}>{busy ? 'One moment…' : authMode === 'sign-up' ? 'Create account' : 'Sign in'} <ArrowRight/></Button></form><div className="auth-divider">or</div><Button variant="outline" className="w-full !h-12" onClick={googleSignIn}><span className="google-g">G</span> Continue with Google</Button>{message && <p className="form-message" role="status">{message}</p>}<p className="auth-switch">{authMode === 'sign-up' ? 'Already have an account?' : 'New around here?'} <Button variant="link" onClick={() => { setAuthMode(authMode === 'sign-up' ? 'sign-in' : 'sign-up'); setMessage(''); }}>{authMode === 'sign-up' ? 'Sign in' : 'Create account'}</Button></p></div></div></main>;
+  if (!couple) return <main className="setup-shell"><div className="auth-brand"><span className="brand-mark">♥</span> togetherly<span className="brand-dot">.</span></div><div className="setup-content"><CoupleAvatars compact/><span className="eyebrow">THIS IS WHERE IT BEGINS</span><h1>Better together.</h1><p>Start a new space for the two of you, or join the one your person has already made.</p><div className="setup-actions"><Button size="lg" onClick={makeCouple} disabled={busy}>Start our space <ArrowRight/></Button><span>or join with an invite code</span><form onSubmit={joinCouple}><input aria-label="Invite code" value={code} onChange={e => setCode(e.target.value.toUpperCase())} maxLength={8} placeholder="8-character code" required/><Button type="submit" variant="secondary" disabled={busy}>Join <ArrowRight/></Button></form></div>{message && <p className="form-message" role="status">{message}</p>}</div><Button variant="ghost" className="setup-signout" onClick={() => supabase.auth.signOut()}><LogOut size={16}/> Sign out</Button></main>;
+  return <div className="app-shell"><aside className="sidebar"><div className="brand"><span className="brand-mark">♥</span> togetherly<span className="brand-dot">.</span></div><div className="sidebar-caption">YOUR LITTLE WORLD</div><nav className="side-nav" aria-label="Main navigation"><Button variant="ghost" className={`nav-item ${tab === 'home' ? 'active' : ''}`} onClick={() => go('home')}><Home/> Home</Button><Button variant="ghost" className={`nav-item ${tab === 'lists' ? 'active' : ''}`} onClick={() => go('lists')}><Heart/> Our lists</Button><Button variant="ghost" className={`nav-item ${tab === 'dates' ? 'active' : ''}`} onClick={() => go('dates')}><CalendarDays/> Date journal</Button><Button variant="ghost" className={`nav-item ${tab === 'avatars' ? 'active' : ''}`} onClick={() => go('avatars')}><Sparkles/> Our characters</Button></nav><div className="sidebar-bottom"><div className="level-mini"><span className="level-icon">✦</span><div><strong>Level {level} couple</strong><small>{xp} total XP</small></div></div><Button variant="ghost" className="nav-item signout" onClick={() => supabase.auth.signOut()}><LogOut/> Sign out</Button></div></aside>
+  <main className="main-area"><header className="topbar"><div className="mobile-brand"><span className="brand-mark">♥</span> togetherly<span className="brand-dot">.</span></div><div className="topbar-kicker">A SPACE FOR {profile?.display_name?.toUpperCase() || 'YOU'} {partner ? `& ${partner.display_name.toUpperCase()}` : '& YOUR PERSON'}</div><div className="topbar-right"><span className="xp-pill"><Sparkles size={15}/> {xp} XP</span><span className="profile-bubble" title={profile?.display_name}>{profile?.display_name?.charAt(0).toUpperCase() || 'Y'}</span></div></header>
+  <div className="content">
+  {tab === 'home' && <><div className="home-hero"><div className="home-copy"><span className="eyebrow light">✦ &nbsp; YOUR ADVENTURE TOGETHER</span><h1>Here's to<br/>all the <em>little things.</em></h1><p>A home for every plan, place and passing thought worth sharing.</p><Button variant="secondary" size="lg" className="hero-button" onClick={() => openIdea()}>Add an idea <Plus size={17}/></Button></div><div className="home-art"><span className="hero-flower flower-one">✿</span><span className="hero-flower flower-two">✳</span><CoupleAvatars first={profile} second={partner}/><div className="art-ground"/></div></div>
+  {!partner && <div className="invite-strip"><div className="invite-symbol">✉</div><div><strong>Make this your shared space</strong><p>Send your person this invite code so they can join you.</p></div><div className="invite-code"><span>{couple.invite_code}</span><Button variant="ghost" size="icon" title="Copy invite code" aria-label="Copy invite code" onClick={async () => { await navigator.clipboard.writeText(couple.invite_code); setMessage('Invite code copied!'); }}><Copy size={16}/></Button></div></div>}
+  <div className="section-heading"><div><span className="eyebrow">THE POSSIBILITIES</span><h2>What shall we do?</h2></div><Button variant="link" onClick={() => go('lists')}>See all lists <ArrowRight size={16}/></Button></div><div className="category-grid">{categories.slice(0, 6).map(c => <Button key={c.key} variant="ghost" className={`category-card tint-${c.tint}`} onClick={() => { setCategory(c.key); setTab('lists'); }}><span className="category-icon">{c.icon}</span><span className="category-name">{c.short}</span><span className="category-count">{ideas.filter(i => i.category === c.key).length} ideas <ChevronRight size={15}/></span></Button>)}</div>
+  <div className="home-lower"><div className="progress-section"><div className="section-heading small"><div><span className="eyebrow">GROWING TOGETHER</span><h2>Your story so far</h2></div></div><div className="progress-band"><div className="progress-badge">✦</div><div className="progress-info"><strong>Level {level} <span>·</span> {level < 2 ? 'The beginning' : level < 4 ? 'Getting closer' : 'Adventure duo'}</strong><p>{xp % 150} / 150 XP to next level</p><div className="progress-track"><div style={{ width: `${(xp % 150) / 150 * 100}%` }}/></div></div><span className="progress-stats">{dates.length} {dates.length === 1 ? 'date' : 'dates'} together</span></div></div><div className="next-section"><span className="eyebrow">A LITTLE NUDGE</span><h2>Make a memory</h2><p>{ideas.length ? `You have ${ideas.length} ideas waiting. Pick one and make it happen!` : 'Every great date begins with an idea. Add your first one!'} </p><Button variant="outline" onClick={() => ideas.length ? go('lists') : openIdea()}>{ideas.length ? 'Explore ideas' : 'Add an idea'} <ArrowRight size={16}/></Button></div></div></>}
+  {tab === 'lists' && <><div className="page-heading">{category && <Button variant="ghost" className="back-link" onClick={() => setCategory(null)}><ArrowLeft size={17}/> All lists</Button>}<span className="eyebrow">{category ? 'ONE IDEA AT A TIME' : 'THE SOMEDAY COLLECTION'}</span><div className="heading-row"><div><h1>{categoryInfo ? categoryInfo.title : 'Our lists'}</h1><p>{categoryInfo ? `${currentIdeas.length} ${currentIdeas.length === 1 ? 'idea' : 'ideas'} to look forward to.` : 'Everything you want to try, see, taste and do together.'}</p></div><Button onClick={() => openIdea(undefined, category || undefined)}><Plus size={17}/> Add idea</Button></div></div>{!category ? <div className="list-grid">{categories.map(c => <Button variant="ghost" key={c.key} className={`list-tile tint-${c.tint}`} onClick={() => setCategory(c.key)}><span className="list-emoji">{c.icon}</span><span className="list-tile-bottom"><span><strong>{c.title}</strong><small>{ideas.filter(i => i.category === c.key).length} ideas</small></span><span className="tile-arrow"><ArrowRight size={18}/></span></span></Button>)}</div> : currentIdeas.length ? <div className="idea-list">{currentIdeas.map(i => <article className="idea-row" key={i.id}><div className={`idea-emoji tint-${categoryInfo?.tint}`}>{categoryInfo?.icon}</div><div className="idea-details"><h3>{i.title}</h3>{i.note && <p>{i.note}</p>}{i.link && <a href={i.link} target="_blank" rel="noreferrer"><LinkIcon size={13}/> Open link</a>}</div><div className="idea-actions"><Button size="icon" variant="ghost" title="Mark as a date" aria-label={`Mark ${i.title} as a date`} onClick={() => openDate(i)}><Check size={17}/></Button><Button size="icon" variant="ghost" title="Edit idea" aria-label={`Edit ${i.title}`} onClick={() => openIdea(i)}><Pencil size={16}/></Button><Button size="icon" variant="ghost" title="Delete idea" aria-label={`Delete ${i.title}`} onClick={() => deleteIdea(i)}><Trash2 size={16}/></Button></div></article>)}</div> : <div className="empty-state"><div className="empty-illustration">{categoryInfo?.icon}</div><h2>Nothing here... yet!</h2><p>The best plans start with one little idea.</p><Button onClick={() => openIdea(undefined, category || undefined)}><Plus size={16}/> Add your first idea</Button></div>}{message && <p className="form-message" role="status">{message}</p>}</>}
+  {tab === 'dates' && <><div className="page-heading"><span className="eyebrow">THE GOOD STUFF</span><div className="heading-row"><div><h1>Our date journal</h1><p>A little record of the moments that make us, us.</p></div><Button onClick={() => openDate()}><Plus size={17}/> Log a date</Button></div></div><div className="dates-summary"><div className="dates-summary-icon">♥</div><div><strong>{dates.length} {dates.length === 1 ? 'memory' : 'memories'} made</strong><p>Each date adds {xpPerDate} XP to your shared adventure.</p></div><span>+{xp} XP</span></div>{dates.length ? <div className="journal-list">{dates.map(d => <article key={d.id} className="journal-entry"><div className="journal-dot"/><div className="journal-content"><span className="journal-date">{new Date(`${d.happened_on}T12:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</span><h3>{d.title}</h3>{d.note && <p>{d.note}</p>}<span className="earned">✦ +{xpPerDate} XP earned</span></div><Button size="icon" variant="ghost" title="Remove date" aria-label={`Remove ${d.title}`} onClick={() => deleteDate(d)}><Trash2 size={16}/></Button></article>)}</div> : <div className="empty-state"><div className="empty-illustration">📸</div><h2>Every story starts somewhere.</h2><p>Log your first date together and start collecting memories.</p><Button onClick={() => openDate()}><Plus size={16}/> Log a date</Button></div>}{message && <p className="form-message" role="status">{message}</p>}</>}
+  {tab === 'avatars' && <><div className="page-heading"><span className="eyebrow">YOUR TWO-PERSON TEAM</span><div className="heading-row"><div><h1>Our characters</h1><p>Make them yours. New accessories unlock as you make memories.</p></div><span className="level-label">✦ Level {level}</span></div></div><div className="character-stage"><span className="stage-star stage-star-left">✳</span><CoupleAvatars first={profile} second={partner}/><span className="stage-star stage-star-right">✦</span><div className="character-names"><span>{profile?.display_name}</span><span>{partner?.display_name || 'Your person'}</span></div></div><div className="customizer"><div className="customizer-header"><div><span className="eyebrow">MAKE IT YOURS</span><h2>Dress your character</h2></div><span>Accessories unlock with dates ✦</span></div><div className="customizer-fields"><label>Your name<input value={profile?.display_name || ''} onChange={e => setProfile(profile ? { ...profile, display_name: e.target.value } : null)} onBlur={() => { if (profile?.display_name.trim()) void updateProfile({ display_name: profile.display_name.trim() }); }} maxLength={40}/></label><label>Skin tone<select value={profile?.skin || 'peach'} onChange={e => updateProfile({ skin: e.target.value })}><option value="peach">Peach</option><option value="tan">Warm tan</option><option value="deep">Deep</option><option value="rosy">Rosy</option></select></label><label>Hair colour<select value={profile?.hair || 'dark'} onChange={e => updateProfile({ hair: e.target.value })}><option value="dark">Dark</option><option value="brown">Brown</option><option value="blonde">Blonde</option><option value="red">Auburn</option></select></label><label>Outfit<select value={profile?.outfit || 'green'} onChange={e => updateProfile({ outfit: e.target.value })}><option value="green">Forest green</option><option value="pink">Rose pink</option><option value="yellow">Sunshine yellow</option><option value="blue">Sky blue</option></select></label></div><h3>Accessories</h3><div className="reward-grid">{rewards.map(r => <Button variant="ghost" key={r.key} disabled={level < r.level} className={`reward-tile ${profile?.accessory === r.key ? 'selected' : ''}`} onClick={() => updateProfile({ accessory: r.key })}><span className="reward-icon">{level < r.level ? <Lock size={21}/> : r.icon}</span><strong>{r.title}</strong><small>{level < r.level ? `Unlock at level ${r.level}` : profile?.accessory === r.key ? 'Equipped' : 'Available'}</small></Button>)}</div></div>{message && <p className="form-message" role="status">{message}</p>}</>}
+  </div></main><nav className="bottom-nav" aria-label="Mobile navigation"><Button variant="ghost" className={tab === 'home' ? 'active' : ''} onClick={() => go('home')}><Home size={21}/><span>Home</span></Button><Button variant="ghost" className={tab === 'lists' ? 'active' : ''} onClick={() => go('lists')}><Heart size={21}/><span>Lists</span></Button><Button variant="ghost" className={tab === 'dates' ? 'active' : ''} onClick={() => go('dates')}><CalendarDays size={21}/><span>Dates</span></Button><Button variant="ghost" className={tab === 'avatars' ? 'active' : ''} onClick={() => go('avatars')}><Sparkles size={21}/><span>Us</span></Button></nav>
+  {modal && <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModal(null); }}><div className="modal-panel" role="dialog" aria-modal="true" aria-label={modal === 'idea' ? 'Add an idea' : 'Log a date'}><div className="modal-heading"><div><span className="eyebrow">{modal === 'idea' ? 'FOR THE SOMEDAY LIST' : 'FOR THE MEMORY BOOK'}</span><h2>{modal === 'idea' ? editing ? 'Edit idea' : 'Add a little idea' : 'Log a date'}</h2></div><Button variant="ghost" size="icon" aria-label="Close" onClick={() => setModal(null)}><X size={20}/></Button></div><form onSubmit={modal === 'idea' ? saveIdea : saveDate}>{modal === 'idea' ? <><label>Which list?<select value={formCategory} onChange={e => setFormCategory(e.target.value)}>{categories.map(c => <option value={c.key} key={c.key}>{c.icon} {c.title}</option>)}</select></label><label>What's the idea?<input autoFocus value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Make homemade pasta" maxLength={200} required/></label><label>Any details? <span>(optional)</span><textarea value={note} onChange={e => setNote(e.target.value)} placeholder="The little things you don't want to forget" rows={3}/></label><label>Link <span>(optional)</span><input type="url" value={link} onChange={e => setLink(e.target.value)} placeholder="https://..."/></label></> : <><label>What did you do?<input autoFocus value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Our first picnic" maxLength={200} required/></label><label>When was it?<input type="date" value={dateDay} onChange={e => setDateDay(e.target.value)} required/></label><label>From an idea? <span>(optional)</span><select value={ideaId} onChange={e => { setIdeaId(e.target.value); const picked = ideas.find(i => i.id === e.target.value); if (picked) setTitle(picked.title); }}><option value="">Just a date</option>{ideas.map(i => <option key={i.id} value={i.id}>{i.title}</option>)}</select></label><label>A note to remember <span>(optional)</span><textarea value={note} onChange={e => setNote(e.target.value)} placeholder="What made it special?" rows={3}/></label></>}{message && <p className="form-message" role="alert">{message}</p>}<div className="modal-footer"><Button type="button" variant="outline" onClick={() => setModal(null)}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? 'Saving…' : modal === 'idea' ? 'Save idea' : `Save date · +${xpPerDate} XP`} <ArrowRight size={16}/></Button></div></form></div></div>}
+  </div>;
 }
