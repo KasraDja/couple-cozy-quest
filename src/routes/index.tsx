@@ -2,7 +2,6 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useEffect, useMemo, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import { lovable } from '@/integrations/lovable/index';
 import { Button } from '@/components/ui/button';
 import { CoupleAvatars } from '@/components/CoupleAvatars';
 import { ArrowLeft, ArrowRight, Check, ChevronRight, Copy, Heart, Home, LogOut, Plus, Search, Sparkles, Trash2, X, Pencil, CalendarDays, Lock, Link as LinkIcon } from 'lucide-react';
@@ -10,9 +9,9 @@ import type { Tables } from '@/integrations/supabase/types';
 
 export const Route = createFileRoute('/')({
   head: () => ({ meta: [
-    { title: 'Togetherly — Our little world' },
+    { title: 'Fig Collecting' },
     { name: 'description', content: 'A private place for two to save ideas, make memories, and level up together.' },
-    { property: 'og:title', content: 'Togetherly — Our little world' },
+    { property: 'og:title', content: 'Fig Collecting' },
     { property: 'og:description', content: 'Save your next adventure and celebrate every date together.' },
     { property: 'og:type', content: 'website' },
     { name: 'twitter:card', content: 'summary_large_image' },
@@ -105,7 +104,7 @@ function App() {
     else if (result.data.user) { setUser(result.data.user); await loadData(result.data.user); }
     setBusy(false);
   }
-  async function googleSignIn() { setMessage(''); const result = await lovable.auth.signInWithOAuth('google', { redirect_uri: window.location.origin }); if (result.error) setMessage(result.error.message); else if (!result.redirected) { const { data } = await supabase.auth.getUser(); if (data.user) { setUser(data.user); await loadData(data.user); } } }
+  async function googleSignIn() { setMessage(''); const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + import.meta.env.BASE_URL } }); if (error) setMessage(error.message); }
   async function makeCouple() { if (!user) return; setBusy(true); setMessage(''); const random = Array.from(crypto.getRandomValues(new Uint8Array(8))).map(v => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[v % 32]).join(''); const { error } = await supabase.rpc('create_couple', { _code: random }); if (error) setMessage(error.message); else await refresh(); setBusy(false); }
   async function joinCouple(e: React.FormEvent) { e.preventDefault(); setBusy(true); setMessage(''); const { error } = await supabase.rpc('join_couple', { _code: code.toUpperCase().trim() }); if (error) setMessage(error.message); else await refresh(); setBusy(false); }
   function openIdea(item?: Idea, selected?: string) { setEditing(item || null); setTitle(item?.title || ''); setNote(item?.note || ''); setLink(item?.link || ''); setFormCategory(item?.category || selected || category || 'recipes'); setMessage(''); setModal('idea'); }

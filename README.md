@@ -1,26 +1,45 @@
-# Our Shared Adventures
+# Fig Collecting
 
-I want to make an app for me and my girlfriend to be able to use. We want to be able to have different these lists will be recipes to make, places to go eat, things to watch, music recommendations, places to go to, things to do at home, Trips to do, events and gigs, video recommendations. Make the colour theme forest green like a duolingo green, give us little avatars and make them pose together, make it so that every date gives us mroe XP points and we can level up and gain acessories to customise our characters with.
+A shared app for couples to keep lists of things to do together and track the dates they've been on.
 
-This project was built with [Lovable](https://lovable.dev).
+- **Shared lists**: recipes, restaurants, shows and films, music, places to visit, things to do at home, trips, events and gigs, and videos.
+- **Avatars**: two customisable characters shown together, styled in a forest-green theme.
+- **XP and levels**: each completed date earns XP; levelling up unlocks accessories for the avatars.
 
-**Live app**: https://couple-cozy-quest.lovable.app
+**Live app**: https://kasradja.github.io/couple-cozy-quest/
 
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/5f326d7b-71f5-430c-b02b-e48bbc32180b).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+The frontend is a static single-page app deployed to GitHub Pages. Data and sign-in use [Supabase](https://supabase.com).
 
 ## Development
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+You need [Bun](https://bun.sh). Create a `.env` file with your Supabase project's values (Supabase dashboard → Project Settings → API):
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
+VITE_SUPABASE_URL=https://<project-ref>.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=<publishable key>
 ```
+
+Then:
+
+```sh
+bun install
+bun run dev
+```
+
+The app runs at http://localhost:8080.
+
+## Supabase setup
+
+1. Create a project at https://supabase.com.
+2. Create the tables: run the files in `supabase/migrations/` in order in the SQL editor, or run `supabase link --project-ref <project-ref>` and `supabase db push` with the [Supabase CLI](https://supabase.com/docs/guides/cli).
+3. Google sign-in:
+   - In Google Cloud Console, create an OAuth client (type "Web application") with the authorized redirect URI `https://<project-ref>.supabase.co/auth/v1/callback`.
+   - In Supabase → Authentication → Sign In / Providers → Google, enable it and enter the client ID and secret.
+   - In Supabase → Authentication → URL Configuration, set the Site URL to `https://kasradja.github.io/couple-cozy-quest/` and add `http://localhost:8080/` to the redirect URLs.
+
+## Deployment
+
+Every push to `main` builds and deploys the site with `.github/workflows/deploy.yml`. One-time setup in the GitHub repository settings:
+
+1. Settings → Pages → Source: **GitHub Actions**.
+2. Settings → Secrets and variables → Actions: add `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`.
