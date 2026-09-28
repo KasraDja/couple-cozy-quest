@@ -14,13 +14,195 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      couple_members: {
+        Row: {
+          couple_id: string
+          joined_at: string
+          user_id: string
+        }
+        Insert: {
+          couple_id: string
+          joined_at?: string
+          user_id: string
+        }
+        Update: {
+          couple_id?: string
+          joined_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "couple_members_couple_id_fkey"
+            columns: ["couple_id"]
+            isOneToOne: false
+            referencedRelation: "couples"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      couples: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          invite_code: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          invite_code: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          invite_code?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      dates: {
+        Row: {
+          added_by: string
+          couple_id: string
+          created_at: string
+          happened_on: string
+          id: string
+          idea_id: string | null
+          note: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          added_by: string
+          couple_id: string
+          created_at?: string
+          happened_on?: string
+          id?: string
+          idea_id?: string | null
+          note?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          added_by?: string
+          couple_id?: string
+          created_at?: string
+          happened_on?: string
+          id?: string
+          idea_id?: string | null
+          note?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dates_couple_id_fkey"
+            columns: ["couple_id"]
+            isOneToOne: false
+            referencedRelation: "couples"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dates_idea_id_fkey"
+            columns: ["idea_id"]
+            isOneToOne: false
+            referencedRelation: "ideas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ideas: {
+        Row: {
+          added_by: string
+          category: string
+          couple_id: string
+          created_at: string
+          id: string
+          link: string | null
+          note: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          added_by: string
+          category: string
+          couple_id: string
+          created_at?: string
+          id?: string
+          link?: string | null
+          note?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          added_by?: string
+          category?: string
+          couple_id?: string
+          created_at?: string
+          id?: string
+          link?: string | null
+          note?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ideas_couple_id_fkey"
+            columns: ["couple_id"]
+            isOneToOne: false
+            referencedRelation: "couples"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          accessory: string
+          created_at: string
+          display_name: string
+          hair: string
+          id: string
+          outfit: string
+          skin: string
+          updated_at: string
+        }
+        Insert: {
+          accessory?: string
+          created_at?: string
+          display_name?: string
+          hair?: string
+          id: string
+          outfit?: string
+          skin?: string
+          updated_at?: string
+        }
+        Update: {
+          accessory?: string
+          created_at?: string
+          display_name?: string
+          hair?: string
+          id?: string
+          outfit?: string
+          skin?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      create_couple: { Args: { _code: string }; Returns: string }
+      is_couple_member: {
+        Args: { _couple_id: string; _user_id: string }
+        Returns: boolean
+      }
+      join_couple: { Args: { _code: string }; Returns: string }
     }
     Enums: {
       [_ in never]: never
