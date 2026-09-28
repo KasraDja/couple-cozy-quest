@@ -64,7 +64,7 @@ function App() {
   async function loadData(current: User) {
     const { data: own } = await supabase.from('profiles').select('*').eq('id', current.id).maybeSingle();
     if (!own) {
-      const { data: created } = await supabase.from('profiles').upsert({ id: current.id, display_name: current.user_metadata?.display_name || current.email?.split('@')[0] || 'You' }).select().single();
+      const { data: created } = await supabase.from('profiles').upsert({ id: current.id, display_name: current.user_metadata?.['display_name'] || current.email?.split('@')[0] || 'You' }).select().single();
       setProfile(created);
     } else setProfile(own);
     const { data: membership } = await supabase.from('couple_members').select('couple_id,user_id').eq('user_id', current.id).maybeSingle();

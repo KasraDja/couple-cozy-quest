@@ -6,9 +6,9 @@ const hairColors: Record<string,string> = { dark: '#312A23', brown: '#76503A', b
 const outfitColors: Record<string,string> = { green: '#297A4C', pink: '#E78B90', yellow: '#F2BD56', blue: '#6092A4' };
 
 function Person({ avatar, flip = false }: { avatar: Avatar; flip?: boolean }) {
-  const skin = skinColors[avatar.skin || 'peach'] || skinColors.peach;
-  const hair = hairColors[avatar.hair || 'dark'] || hairColors.dark;
-  const shirt = outfitColors[avatar.outfit || 'green'] || outfitColors.green;
+  const skin = skinColors[avatar.skin || 'peach'] || skinColors['peach'];
+  const hair = hairColors[avatar.hair || 'dark'] || hairColors['dark'];
+  const shirt = outfitColors[avatar.outfit || 'green'] || outfitColors['green'];
   return <svg viewBox="0 0 150 215" role="img" aria-label={`${avatar.display_name || 'Your partner'} avatar`} className={`avatar-person ${flip ? 'avatar-flip' : ''}`}>
     <ellipse cx="75" cy="207" rx="55" ry="7" fill="#173A2B" opacity=".1" />
     <path d="M36 142 Q28 143 21 187 Q19 197 32 199 L48 199 L58 150Z" fill={skin}/>
