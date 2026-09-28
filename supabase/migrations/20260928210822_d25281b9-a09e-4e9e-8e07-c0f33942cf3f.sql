@@ -1,0 +1,1 @@
+REVOKE ALL ON FUNCTION public.create_couple(text) FROM anon; REVOKE ALL ON FUNCTION public.join_couple(text) FROM anon; REVOKE ALL ON FUNCTION public.is_couple_member(uuid,uuid) FROM anon, PUBLIC; GRANT EXECUTE ON FUNCTION public.is_couple_member(uuid,uuid) TO authenticated;
